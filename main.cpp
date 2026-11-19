@@ -22,19 +22,36 @@ std::map<std::string, User> users = {{
 int main() {
     httplib::Server s;
 
-    s.Get("/", [](const auto&, httplib::Response& res) {
+    s.Get("/", [](const auto&, auto& res) {
         res.set_content("Chris Server", "text/plain");
         std::cerr << "Wow we got a message\n";
     });
 
-    s.Get("/users", [](const auto&, httplib::Response& res) {
+    s.Get("/users", [](const auto&, auto& res) {
         res.status = 200;
-        nlohmann::json out = nlohmann::json::array();
+
+        nlohmann::json resJson = nlohmann::json::array();
         for (const auto& [id, user] : users) {
-            out.push_back(user);
+            resJson.push_back(user);
         }
-        res.set_content(out.dump(), "application/json");
+
+        res.set_content(resJson.dump(), "application/json");
         std::cerr << "Returned the users!";
+    });
+
+    s.Get("/users/:id", [](const httplib::Request& req, httplib::Response& res) {
+        const auto& id = req.path_params.at("id");
+
+        const auto it = users.find(id);
+        if (it == users.end()) {
+            res.status = 404;
+            res.set_content(R"({"message":"User not found"})", "application/json");
+            std::cerr << "User " << id << " not found\n";
+            return;
+        }
+
+        nlohmann::json resJson = it->second;
+        res.set_content(resJson.dump(), "application/json");
     });
 
     if (!s.listen(HOST, PORT)) {
