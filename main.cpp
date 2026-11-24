@@ -76,11 +76,17 @@ int main() {
             auto json = nlohmann::json::parse(req.body);
 
             User user = parseUser(json);
+            if (user.name.empty()) {
+                throw std::invalid_argument("name should not be empty");
+            }
             user.print();
             users.insert({user.id, user});
 
+            const auto it = users.find(user.id);
+            nlohmann::json resJson = it->second;
+            res.set_content(resJson.dump(), "application/json");
+
             res.status = 201;
-            res.set_content("Chris Server", "text/plain");
         } catch (nlohmann::json::parse_error& e) {
             std::cerr << "Everything was wrong!";
 
@@ -90,31 +96,38 @@ int main() {
     });
 
     s.Put("/users/:id", [](const httplib::Request& req, httplib::Response& res) {
-        const auto json = nlohmann::json::parse(req.body);
+        try {
+            const auto json = nlohmann::json::parse(req.body);
 
-        const auto name = json.at("name").get<std::string>();
-        const auto& id = req.path_params.at("id");
+            const auto name = json.at("name").get<std::string>();
+            const auto& id = req.path_params.at("id");
 
-        if (id.empty() || name.empty()) {
-            throw std::invalid_argument("name should not be empty");
+            if (id.empty() || name.empty()) {
+                throw std::invalid_argument("name should not be empty");
+            }
+
+            const auto it = users.find(id);
+
+            if (it == users.end()) {
+                res.status = 404;
+                res.set_content(R"({"message":"User not found"})", "application/json");
+                std::cerr << "User " << id << " not found\n";
+                return;
+            }
+
+            it->second.name = name;
+            std::cerr << "User updated successfully!";
+
+            nlohmann::json resJson = it->second;
+
+            res.status = 200;
+            res.set_content(resJson.dump(), "application/json");
+        } catch (nlohmann::json::parse_error& e) {
+            std::cerr << "Everything was wrong!";
+
+            res.status = 400;
+            std::cerr << "parse error at byte " << e.byte << std::endl;
         }
-
-        const auto it = users.find(id);
-
-        if (it == users.end()) {
-            res.status = 404;
-            res.set_content(R"({"message":"User not found"})", "application/json");
-            std::cerr << "User " << id << " not found\n";
-            return;
-        }
-
-        it->second.name = name;
-        std::cerr << "User updated successfully!";
-
-        nlohmann::json resJson = it->second;
-
-        res.status = 200;
-        res.set_content(resJson.dump(), "application/json");
     });
 
     s.Delete("/users/:id", [](const httplib::Request& req, httplib::Response& res) {
