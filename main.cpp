@@ -2,6 +2,7 @@
 #include "nlohmann/json.hpp"
 #include <iostream>
 #include <map>
+#include <stdexcept>
 
 const std::string HOST = "0.0.0.0";
 
@@ -10,6 +11,10 @@ const int PORT = 3000;
 struct User {
     std::string id;
     std::string name;
+
+    void print() {
+        std::cerr << "User: {id: " << id << ", " << "name: " << name << "}\n";
+    }
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(User, id, name);
 
@@ -18,6 +23,14 @@ std::map<std::string, User> users = {{
     {"2", {"2", "Toni"}},
     {"3", {"3", "Ani"}},
 }};
+
+User parseUser(const nlohmann::json& json) {
+    const std::string name = json.at("name");
+    if (name.empty()) {
+        throw std::invalid_argument("name should not be empty");
+    }
+    return {"123", name};
+}
 
 int main() {
     httplib::Server s;
@@ -51,6 +64,52 @@ int main() {
         }
 
         nlohmann::json resJson = it->second;
+        res.set_content(resJson.dump(), "application/json");
+    });
+
+    s.Post("/users", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            auto json = nlohmann::json::parse(req.body);
+
+            User user = parseUser(json);
+            user.print();
+            users.insert({user.id, user});
+
+            res.status = 201;
+            res.set_content("Chris Server", "text/plain");
+        } catch (nlohmann::json::parse_error& e) {
+            std::cerr << "Everything was wrong!";
+
+            res.status = 400;
+            std::cerr << "parse error at byte " << e.byte << std::endl;
+        }
+    });
+
+    s.Put("/users/:id", [](const httplib::Request& req, httplib::Response& res) {
+        const auto json = nlohmann::json::parse(req.body);
+
+        const auto name = json.at("name").get<std::string>();
+        const auto& id = req.path_params.at("id");
+
+        if (id.empty() || name.empty()) {
+            throw std::invalid_argument("name should not be empty");
+        }
+
+        const auto it = users.find(id);
+
+        if (it == users.end()) {
+            res.status = 404;
+            res.set_content(R"({"message":"User not found"})", "application/json");
+            std::cerr << "User " << id << " not found\n";
+            return;
+        }
+
+        it->second.name = name;
+        std::cerr << "User updated successfully!";
+
+        nlohmann::json resJson = it->second;
+
+        res.status = 200;
         res.set_content(resJson.dump(), "application/json");
     });
 
