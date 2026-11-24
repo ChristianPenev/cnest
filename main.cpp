@@ -1,5 +1,6 @@
 #include "httplib.h"
 #include "nlohmann/json.hpp"
+#include "uuid.h"
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -26,10 +27,13 @@ std::map<std::string, User> users = {{
 
 User parseUser(const nlohmann::json& json) {
     const std::string name = json.at("name");
+
     if (name.empty()) {
         throw std::invalid_argument("name should not be empty");
     }
-    return {"123", name};
+    const std::string id = uuidv7String();
+
+    return {id, name};
 }
 
 int main() {
@@ -111,6 +115,24 @@ int main() {
 
         res.status = 200;
         res.set_content(resJson.dump(), "application/json");
+    });
+
+    s.Delete("/users/:id", [](const httplib::Request& req, httplib::Response& res) {
+        const auto& id = req.path_params.at("id");
+
+        std::cerr << "The id is: " << id;
+
+        const auto it = users.find(id);
+        if (it == users.end()) {
+            res.status = 404;
+            res.set_content(R"({"message":"User not found"})", "application/json");
+            std::cerr << "User " << id << " not found\n";
+            return;
+        }
+
+        users.erase(id);
+        res.status = 200;
+        res.set_content("User got deleted", "text/plain");
     });
 
     if (!s.listen(HOST, PORT)) {
