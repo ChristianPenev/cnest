@@ -76,9 +76,7 @@ int main() {
             auto json = nlohmann::json::parse(req.body);
 
             User user = parseUser(json);
-            if (user.name.empty()) {
-                throw std::invalid_argument("name should not be empty");
-            }
+
             user.print();
             users.insert({user.id, user});
 
@@ -87,11 +85,11 @@ int main() {
             res.set_content(resJson.dump(), "application/json");
 
             res.status = 201;
-        } catch (nlohmann::json::parse_error& e) {
-            std::cerr << "Everything was wrong!";
-
+        } catch (const std::exception& e) {
+            std::cerr << "Bad request: " << e.what() << '\n';
             res.status = 400;
-            std::cerr << "parse error at byte " << e.byte << std::endl;
+            const nlohmann::json error = {{"message", e.what()}};
+            res.set_content(error.dump(), "application/json");
         }
     });
 
@@ -122,11 +120,13 @@ int main() {
 
             res.status = 200;
             res.set_content(resJson.dump(), "application/json");
-        } catch (nlohmann::json::parse_error& e) {
-            std::cerr << "Everything was wrong!";
 
+        } catch (const std::exception& e) {
+
+            std::cerr << "Bad request: " << e.what() << '\n';
             res.status = 400;
-            std::cerr << "parse error at byte " << e.byte << std::endl;
+            const nlohmann::json error = {{"message", e.what()}};
+            res.set_content(error.dump(), "application/json");
         }
     });
 
